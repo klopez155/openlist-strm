@@ -294,8 +294,28 @@ func TestGetFileURL_WithRawURL(t *testing.T) {
 		t.Fatalf("GetFileURL() error = %v", err)
 	}
 
-	if url != "http://cdn.example.com/movies/movie.mp4" {
-		t.Errorf("url = %v, want http://cdn.example.com/movies/movie.mp4", url)
+	// raw_url is an upstream temporary link and must be ignored
+	expectedURL := server.URL + "/d/movies/movie.mp4"
+	if url != expectedURL {
+		t.Errorf("url = %v, want %v", url, expectedURL)
+	}
+}
+
+func TestGetFileURL_EncodesPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"code":200,"message":"success","data":{"name":"a","sign":"s+1="}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token", true, 30)
+	url, err := client.GetFileURL(context.Background(), "/电影/A #1?.mkv")
+	if err != nil {
+		t.Fatalf("GetFileURL() error = %v", err)
+	}
+
+	expectedURL := server.URL + "/d/%E7%94%B5%E5%BD%B1/A%20%231%3F.mkv?sign=s%2B1%3D"
+	if url != expectedURL {
+		t.Errorf("url = %v, want %v", url, expectedURL)
 	}
 }
 
