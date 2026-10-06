@@ -24,8 +24,10 @@ type ServerConfig struct {
 
 // AlistConfig represents Alist server configuration
 type AlistConfig struct {
-	URL         string        `mapstructure:"url"`
-	Token       string        `mapstructure:"token"`
+	URL   string `mapstructure:"url"`
+	Token string `mapstructure:"token"`
+	// Deprecated: ignored. The sign returned by OpenList is always appended;
+	// kept only so existing config files keep parsing.
 	SignEnabled bool          `mapstructure:"sign_enabled"`
 	Timeout     time.Duration `mapstructure:"timeout"`
 }

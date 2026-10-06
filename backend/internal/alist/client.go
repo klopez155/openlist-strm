@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -17,18 +18,16 @@ import (
 type Client struct {
 	baseURL    string
 	token      string
-	signEnable bool
 	timeout    time.Duration
 	httpClient *http.Client
 }
 
 // NewClient creates a new Alist client
-func NewClient(baseURL, token string, signEnable bool, timeout time.Duration) *Client {
+func NewClient(baseURL, token string, timeout time.Duration) *Client {
 	return &Client{
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		token:      token,
-		signEnable: signEnable,
-		timeout:    timeout,
+		baseURL: strings.TrimSuffix(baseURL, "/"),
+		token:   token,
+		timeout: timeout,
 		httpClient: &http.Client{
 			Timeout: timeout * time.Second,
 		},
@@ -121,9 +120,12 @@ func (c *Client) GetFileURL(ctx context.Context, filePath string) (string, error
 	// raw_url is the upstream driver's temporary link (e.g. PikPak CDN with expire=...),
 	// it must never be persisted into STRM. Always use OpenList's stable /d proxy link.
 	fileURL := c.baseURL + "/d" + encodePath(filePath)
-	if c.signEnable && resp.Data.Sign != "" {
+	// OpenList only returns a sign when the path requires one (sign_all or
+	// meta password); omitting it yields 401, so never gate it locally.
+	if resp.Data.Sign != "" {
 		fileURL += "?sign=" + url.QueryEscape(resp.Data.Sign)
 	}
+	log.Printf("[alist] GetFileURL path=%s signed=%t", filePath, resp.Data.Sign != "")
 
 	return fileURL, nil
 }

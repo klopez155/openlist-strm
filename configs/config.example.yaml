@@ -9,7 +9,7 @@ server:
 alist:
   url: "http://localhost:5244"
   token: "your-alist-token-here"
-  sign_enabled: false
+  sign_enabled: false  # deprecated: ignored, OpenList sign is always appended when returned
   timeout: 30  # seconds
 
 # Note: Path mappings are now managed via Web UI and stored in database
