@@ -59,6 +59,10 @@ export default {
     return api.get(`/tasks/${taskId}`)
   },
 
+  getTaskLogs(taskId) {
+    return api.get(`/tasks/${taskId}/logs`)
+  },
+
   // List tasks with pagination
   listTasks(page = 1, pageSize = 20) {
     return api.get('/tasks', {

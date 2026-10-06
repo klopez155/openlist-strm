@@ -77,6 +77,7 @@ func (s *Server) setupRoutes() {
 		// Task routes
 		api.POST("/generate", s.handleGenerate)
 		api.GET("/tasks/:id", s.handleGetTask)
+		api.GET("/tasks/:id/logs", s.handleGetTaskLogs)
 		api.GET("/tasks", s.handleListTasks)
 
 		// Config routes

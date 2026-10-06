@@ -3,7 +3,7 @@ package strm
 import (
 	"context"
 	"fmt"
-	"log"
+	"github.com/konghanghang/openlist-strm/internal/tasklog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +18,7 @@ type AlistClient interface {
 	Ping(ctx context.Context) error
 	ListFilesRecursive(ctx context.Context, dirPath string, extensions []string, refresh bool) ([]alist.FileItem, error)
 	GetFileURL(ctx context.Context, filePath string) (string, error)
+	BaseURL() string
 }
 
 // Generator generates STRM files
@@ -40,6 +41,7 @@ type GenerateOptions struct {
 	Concurrent   int    // concurrent for this task
 	Mode         string // incremental or full
 	STRMMode     string // alist_path or http_url
+	URLReplace   string // http_url only: external base URL that replaces the OpenList base URL
 	ForceRefresh bool   // force refresh Alist cache
 }
 
@@ -67,7 +69,7 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 
 	// Full mode: clean target directory
 	if opts.Mode == "full" {
-		log.Printf("[TraceID: %s] Cleaning target directory: %s", traceID, opts.TargetPath)
+		tasklog.Printf(ctx, "[TraceID: %s] Cleaning target directory: %s", traceID, opts.TargetPath)
 		if err := cleanDirectory(opts.TargetPath); err != nil {
 			return nil, fmt.Errorf("failed to clean directory: %w", err)
 		}
@@ -78,17 +80,17 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 	if opts.ForceRefresh {
 		refreshMsg = " (force refresh)"
 	}
-	log.Printf("[TraceID: %s] Scanning source directory: %s%s", traceID, opts.SourcePath, refreshMsg)
+	tasklog.Printf(ctx, "[TraceID: %s] Scanning source directory: %s%s", traceID, opts.SourcePath, refreshMsg)
 	files, err := g.alistClient.ListFilesRecursive(ctx, opts.SourcePath, opts.Extensions, opts.ForceRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
 
-	log.Printf("[TraceID: %s] Found %d video files to process", traceID, len(files))
+	tasklog.Printf(ctx, "[TraceID: %s] Found %d video files to process", traceID, len(files))
 
 	// Deduplicate files by priority (when same filename with different extensions)
-	files = deduplicateFilesByPriority(files, traceID)
-	log.Printf("[TraceID: %s] After deduplication: %d files to process", traceID, len(files))
+	files = deduplicateFilesByPriority(ctx, files, traceID)
+	tasklog.Printf(ctx, "[TraceID: %s] After deduplication: %d files to process", traceID, len(files))
 
 	// Validate concurrent value
 	concurrent := opts.Concurrent
@@ -121,17 +123,17 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 				mu.Lock()
 				result.Errors = append(result.Errors, err)
 				mu.Unlock()
-				log.Printf("[TraceID: %s] ❌ ERROR: %s -> %v", traceID, f.Path, err)
+				tasklog.Printf(ctx, "[TraceID: %s] ❌ ERROR: %s -> %v", traceID, f.Path, err)
 			} else if created {
 				mu.Lock()
 				result.FilesCreated++
 				mu.Unlock()
-				log.Printf("[TraceID: %s] ✅ CREATED: %s", traceID, f.Path)
+				tasklog.Printf(ctx, "[TraceID: %s] ✅ CREATED: %s", traceID, f.Path)
 			} else {
 				mu.Lock()
 				result.FilesSkipped++
 				mu.Unlock()
-				log.Printf("[TraceID: %s] ⏭️  SKIPPED: %s (already exists)", traceID, f.Path)
+				tasklog.Printf(ctx, "[TraceID: %s] ⏭️  SKIPPED: %s (already exists)", traceID, f.Path)
 			}
 		}(file)
 	}
@@ -177,7 +179,7 @@ func (g *Generator) generateSTRMFile(ctx context.Context, file alist.FileItem, o
 		if err != nil {
 			return false, fmt.Errorf("failed to get URL for %s: %w", file.Path, err)
 		}
-		strmContent = fileURL
+		strmContent = replaceBaseURL(fileURL, g.alistClient.BaseURL(), opts.URLReplace)
 	}
 
 	// Write STRM file
@@ -186,6 +188,16 @@ func (g *Generator) generateSTRMFile(ctx context.Context, file alist.FileItem, o
 	}
 
 	return true, nil
+}
+
+// replaceBaseURL swaps the internal OpenList base (e.g. http://openlist:5244)
+// for an externally reachable one. Sign query is path-based, so it stays valid.
+func replaceBaseURL(fileURL, baseURL, replacement string) string {
+	replacement = strings.TrimSuffix(strings.TrimSpace(replacement), "/")
+	if replacement == "" || baseURL == "" || !strings.HasPrefix(fileURL, baseURL) {
+		return fileURL
+	}
+	return replacement + strings.TrimPrefix(fileURL, baseURL)
 }
 
 // cleanDirectory removes all files in a directory
@@ -250,7 +262,7 @@ func getExtensionPriority(ext string) int {
 
 // deduplicateFilesByPriority removes duplicate files (same name, different extension)
 // keeping only the one with highest priority
-func deduplicateFilesByPriority(files []alist.FileItem, traceID string) []alist.FileItem {
+func deduplicateFilesByPriority(ctx context.Context, files []alist.FileItem, traceID string) []alist.FileItem {
 	if len(files) == 0 {
 		return files
 	}
@@ -286,7 +298,7 @@ func deduplicateFilesByPriority(files []alist.FileItem, traceID string) []alist.
 			for _, f := range group {
 				extensions = append(extensions, filepath.Ext(f.Path))
 			}
-			log.Printf("[TraceID: %s] 🔍 DUPLICATE: %s has multiple formats: %v",
+			tasklog.Printf(ctx, "[TraceID: %s] 🔍 DUPLICATE: %s has multiple formats: %v",
 				traceID, filepath.Base(baseName), extensions)
 
 			for i := 1; i < len(group); i++ {
@@ -297,7 +309,7 @@ func deduplicateFilesByPriority(files []alist.FileItem, traceID string) []alist.
 				}
 			}
 
-			log.Printf("[TraceID: %s] ✅ SELECTED: %s (priority: %d)",
+			tasklog.Printf(ctx, "[TraceID: %s] ✅ SELECTED: %s (priority: %d)",
 				traceID, filepath.Base(bestFile.Path), bestPriority)
 
 			result = append(result, bestFile)
@@ -305,7 +317,7 @@ func deduplicateFilesByPriority(files []alist.FileItem, traceID string) []alist.
 	}
 
 	if duplicateCount > 0 {
-		log.Printf("[TraceID: %s] Removed %d duplicate files based on priority", traceID, duplicateCount)
+		tasklog.Printf(ctx, "[TraceID: %s] Removed %d duplicate files based on priority", traceID, duplicateCount)
 	}
 
 	return result

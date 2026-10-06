@@ -201,6 +201,10 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-form-item v-if="formData.strm_mode === 'http_url'" label="地址替换" prop="url_replace">
+          <el-input v-model="formData.url_replace" placeholder="http://openlist:5244" clearable />
+        </el-form-item>
+
         <el-form-item label="强制刷新">
           <el-switch v-model="formData.force_refresh" />
           <div class="cron-hint">
@@ -372,6 +376,7 @@ const formData = reactive({
   concurrent: 3,
   mode: 'incremental',
   strm_mode: 'alist_path',
+  url_replace: '',
   force_refresh: false,
   cron_expr: '',
   enabled: true
@@ -442,6 +447,7 @@ const showEditDialog = (config) => {
   formData.concurrent = config.concurrent || 10
   formData.mode = config.mode
   formData.strm_mode = config.strm_mode || 'alist_path'
+  formData.url_replace = config.url_replace || ''
   formData.force_refresh = config.force_refresh || false
   formData.cron_expr = config.cron_expr || ''
   formData.enabled = config.enabled
@@ -604,6 +610,7 @@ const resetForm = () => {
   formData.concurrent = 3
   formData.mode = 'incremental'
   formData.strm_mode = 'alist_path'
+  formData.url_replace = ''
   formData.force_refresh = false
   formData.cron_expr = ''
   formData.enabled = true
@@ -645,6 +652,7 @@ const handleSubmit = async () => {
       concurrent: formData.concurrent,
       mode: formData.mode,
       strm_mode: formData.strm_mode,
+      url_replace: formData.url_replace.trim(),
       force_refresh: formData.force_refresh,
       cron_expr: formData.cron_expr,
       enabled: formData.enabled

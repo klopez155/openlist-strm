@@ -180,6 +180,7 @@ Response:
 
 # 2. 查询任务状态
 GET /api/tasks/{task_id}
+GET /api/tasks/{task_id}/logs
 Response:
 {
   "task_id": "uuid",
