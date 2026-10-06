@@ -103,7 +103,7 @@ func (db *DB) GetTaskByID(taskID string) (*Task, error) {
 // ListTasks lists tasks with pagination
 func (db *DB) ListTasks(limit, offset int) ([]*Task, error) {
 	var tasks []*Task
-	err := db.DB.Order("created_at DESC").Limit(limit).Offset(offset).Find(&tasks).Error
+	err := db.DB.Omit("logs").Order("created_at DESC").Limit(limit).Offset(offset).Find(&tasks).Error
 	return tasks, err
 }
 

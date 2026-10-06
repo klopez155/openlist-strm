@@ -16,6 +16,7 @@ import (
 
 	"github.com/konghanghang/openlist-strm/internal/contextkeys"
 	"github.com/konghanghang/openlist-strm/internal/storage"
+	"github.com/konghanghang/openlist-strm/internal/tasklog"
 )
 
 // GenerateRequest represents a generate request
@@ -146,6 +147,28 @@ func (s *Server) handleGetTask(c *gin.Context) {
 	})
 }
 
+// handleGetTaskLogs returns run logs of a task: live lines while running, persisted lines afterwards
+func (s *Server) handleGetTaskLogs(c *gin.Context) {
+	taskID := c.Param("id")
+
+	if rec, ok := tasklog.Live(taskID); ok {
+		c.JSON(http.StatusOK, gin.H{"task_id": taskID, "running": true, "lines": rec.Lines()})
+		return
+	}
+
+	task, err := s.db.GetTaskByID(taskID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"task_id": taskID,
+		"running": task.Status == "running",
+		"lines":   tasklog.Split(task.Logs),
+	})
+}
+
 // handleListTasks handles list tasks with pagination
 func (s *Server) handleListTasks(c *gin.Context) {
 	// Parse pagination parameters
@@ -222,6 +245,7 @@ func (s *Server) handleGetConfigs(c *gin.Context) {
 			Concurrent:   m.Concurrent,
 			Mode:         m.Mode,
 			STRMMode:     m.STRMMode,
+			URLReplace:   m.URLReplace,
 			ForceRefresh: m.ForceRefresh,
 			CronExpr:     m.CronExpr,
 			Enabled:      m.Enabled,
@@ -445,6 +469,7 @@ type MappingRequest struct {
 	Concurrent   int      `json:"concurrent"`
 	Mode         string   `json:"mode"`
 	STRMMode     string   `json:"strm_mode"`
+	URLReplace   string   `json:"url_replace"`
 	ForceRefresh *bool    `json:"force_refresh"`
 	CronExpr     string   `json:"cron_expr"`
 	Enabled      *bool    `json:"enabled"`
@@ -460,6 +485,7 @@ type MappingResponse struct {
 	Concurrent   int      `json:"concurrent"`
 	Mode         string   `json:"mode"`
 	STRMMode     string   `json:"strm_mode"`
+	URLReplace   string   `json:"url_replace"`
 	ForceRefresh bool     `json:"force_refresh"`
 	CronExpr     string   `json:"cron_expr"`
 	Enabled      bool     `json:"enabled"`
@@ -520,6 +546,7 @@ func (s *Server) handleCreateMapping(c *gin.Context) {
 		Concurrent:   req.Concurrent,
 		Mode:         req.Mode,
 		STRMMode:     req.STRMMode,
+		URLReplace:   strings.TrimSuffix(strings.TrimSpace(req.URLReplace), "/"),
 		ForceRefresh: forceRefresh,
 		CronExpr:     req.CronExpr,
 		Enabled:      enabled,
@@ -547,6 +574,7 @@ func (s *Server) handleCreateMapping(c *gin.Context) {
 		Concurrent:   mapping.Concurrent,
 		Mode:         mapping.Mode,
 		STRMMode:     mapping.STRMMode,
+		URLReplace:   mapping.URLReplace,
 		ForceRefresh: mapping.ForceRefresh,
 		CronExpr:     mapping.CronExpr,
 		Enabled:      mapping.Enabled,
@@ -597,6 +625,7 @@ func (s *Server) handleUpdateMapping(c *gin.Context) {
 		}
 		existing.STRMMode = req.STRMMode
 	}
+	existing.URLReplace = strings.TrimSuffix(strings.TrimSpace(req.URLReplace), "/")
 
 	// Validate and update cron expression
 	// Support both 5-field (minute-based) and 6-field (second-based) cron expressions
@@ -638,6 +667,7 @@ func (s *Server) handleUpdateMapping(c *gin.Context) {
 		Concurrent:   existing.Concurrent,
 		Mode:         existing.Mode,
 		STRMMode:     existing.STRMMode,
+		URLReplace:   existing.URLReplace,
 		ForceRefresh: existing.ForceRefresh,
 		CronExpr:     existing.CronExpr,
 		Enabled:      existing.Enabled,

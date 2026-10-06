@@ -27,6 +27,7 @@ type Task struct {
 	FilesDeleted int
 	FilesSkipped int
 	Errors       string `gorm:"type:text"`
+	Logs         string `gorm:"type:text"` // 任务运行日志，按行拼接
 	StartedAt    time.Time
 	CompletedAt  *time.Time
 	CreatedAt    time.Time
@@ -43,6 +44,7 @@ type Mapping struct {
 	Concurrent   int    `gorm:"default:10"`                          // 并发数
 	Mode         string `gorm:"default:incremental"`                 // incremental or full
 	STRMMode     string `gorm:"column:strm_mode;default:alist_path"` // alist_path or http_url
+	URLReplace   string `gorm:"column:url_replace;default:"`         // http_url 模式下替换 OpenList 内部地址（如 http://openlist:5244）的外部地址
 	ForceRefresh bool   `gorm:"default:false"`                       // 是否强制刷新 Alist 缓存
 	Enabled      bool   `gorm:"default:true"`                        // 是否启用
 	CronExpr     string `gorm:"default:"`                            // Cron 表达式，为空则不启用定时

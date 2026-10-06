@@ -74,14 +74,21 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button
               type="text"
               size="small"
               @click="showTaskDetail(scope.row)"
             >
-              查看详情
+              详情
+            </el-button>
+            <el-button
+              type="text"
+              size="small"
+              @click="showTaskLogs(scope.row)"
+            >
+              运行日志
             </el-button>
           </template>
         </el-table-column>
@@ -133,11 +140,29 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <el-dialog
+      v-model="logsVisible"
+      width="900px"
+      @closed="stopLogsPolling"
+    >
+      <template #header>
+        <div class="logs-header">
+          <span>运行日志</span>
+          <el-text type="info" size="small">{{ logsTaskId }}</el-text>
+          <el-tag v-if="logsRunning" type="warning" size="small">运行中</el-tag>
+        </div>
+      </template>
+      <div ref="logsBox" class="logs-box" v-loading="logsLoading">
+        <div v-if="!logLines.length && !logsLoading" class="logs-empty">暂无日志</div>
+        <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 
@@ -178,6 +203,60 @@ const showTaskDetail = (task) => {
   currentTask.value = task
   detailVisible.value = true
 }
+
+const logsVisible = ref(false)
+const logsLoading = ref(false)
+const logsRunning = ref(false)
+const logsTaskId = ref('')
+const logLines = ref([])
+const logsBox = ref(null)
+let logsTimer = null
+
+const fetchLogs = async () => {
+  const taskId = logsTaskId.value
+  try {
+    const data = await api.getTaskLogs(taskId)
+    if (taskId !== logsTaskId.value) return
+    const box = logsBox.value
+    const atBottom = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40
+    logLines.value = data.lines || []
+    logsRunning.value = !!data.running
+    if (atBottom) {
+      await nextTick()
+      if (logsBox.value) logsBox.value.scrollTop = logsBox.value.scrollHeight
+    }
+    if (!logsRunning.value) {
+      stopLogsPolling()
+      if (tasks.value.some(t => t.task_id === taskId && t.status === 'running')) loadTasks()
+    }
+  } catch (error) {
+    stopLogsPolling()
+    ElMessage.error(`加载运行日志失败：${error.message}`)
+  }
+}
+
+const stopLogsPolling = () => {
+  if (logsTimer) {
+    clearInterval(logsTimer)
+    logsTimer = null
+  }
+}
+
+const showTaskLogs = async (task) => {
+  stopLogsPolling()
+  logsTaskId.value = task.task_id
+  logLines.value = []
+  logsRunning.value = false
+  logsVisible.value = true
+  logsLoading.value = true
+  await fetchLogs()
+  logsLoading.value = false
+  if (logsRunning.value && logsVisible.value) {
+    logsTimer = setInterval(fetchLogs, 2000)
+  }
+}
+
+onBeforeUnmount(stopLogsPolling)
 
 const getModeText = (mode) => {
   const modeMap = {
@@ -256,6 +335,35 @@ onMounted(() => {
   padding: 4px 12px;
   background: rgba(var(--color-primary-rgb), 0.08);
   border-radius: 12px;
+}
+
+.logs-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logs-box {
+  height: 60vh;
+  overflow: auto;
+  padding: 12px 16px;
+  background: var(--el-fill-color-darker);
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.logs-empty {
+  color: var(--el-text-color-secondary);
+  text-align: center;
+  padding-top: 40px;
 }
 
 .pagination-container {

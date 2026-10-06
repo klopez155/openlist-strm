@@ -39,6 +39,7 @@ type MappingConfig struct {
 	Concurrent   int
 	Mode         string
 	STRMMode     string
+	URLReplace   string
 	ForceRefresh bool
 	Enabled      bool
 	CronExpr     string

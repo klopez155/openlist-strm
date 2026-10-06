@@ -17,6 +17,7 @@ import (
 	"github.com/konghanghang/openlist-strm/internal/notification"
 	"github.com/konghanghang/openlist-strm/internal/storage"
 	"github.com/konghanghang/openlist-strm/internal/strm"
+	"github.com/konghanghang/openlist-strm/internal/tasklog"
 )
 
 // Scheduler manages task scheduling and execution
@@ -126,6 +127,7 @@ func (s *Scheduler) RunAll(ctx context.Context) error {
 			Concurrent:   mapping.Concurrent,
 			Mode:         mapping.Mode,
 			STRMMode:     mapping.STRMMode,
+			URLReplace:   mapping.URLReplace,
 			ForceRefresh: mapping.ForceRefresh,
 			Enabled:      mapping.Enabled,
 		}
@@ -163,8 +165,21 @@ func (s *Scheduler) RunMapping(ctx context.Context, mapping config.MappingConfig
 		return fmt.Errorf("[TraceID: %s] failed to create task: %w", traceID, err)
 	}
 
-	log.Printf("[TraceID: %s] Task started: mapping=%s, mode=%s, source=%s, target=%s",
-		traceID, mapping.Name, mapping.Mode, mapping.Source, mapping.Target)
+	ctx, rec := tasklog.Start(ctx, taskID)
+	defer func() {
+		task.Logs = rec.String()
+		if err := s.db.UpdateTask(task); err != nil {
+			log.Printf("[TraceID: %s] WARNING: Failed to persist task logs: %v", traceID, err)
+		}
+		tasklog.Finish(taskID)
+	}()
+
+	tasklog.Printf(ctx, "[TraceID: %s] Task started: mapping=%s, mode=%s, strm_mode=%s, source=%s, target=%s",
+		traceID, mapping.Name, mapping.Mode, mapping.STRMMode, mapping.Source, mapping.Target)
+	if mapping.STRMMode == "http_url" && mapping.URLReplace != "" {
+		tasklog.Printf(ctx, "[TraceID: %s] URL replace enabled: %s -> %s",
+			traceID, s.alistClient.BaseURL(), mapping.URLReplace)
+	}
 
 	// Generate STRM files (context now contains trace_id)
 	result, err := s.generator.Generate(ctx, strm.GenerateOptions{
@@ -174,6 +189,7 @@ func (s *Scheduler) RunMapping(ctx context.Context, mapping config.MappingConfig
 		Concurrent:   mapping.Concurrent,
 		Mode:         mapping.Mode,
 		STRMMode:     mapping.STRMMode,
+		URLReplace:   mapping.URLReplace,
 		ForceRefresh: mapping.ForceRefresh,
 	})
 
@@ -186,9 +202,9 @@ func (s *Scheduler) RunMapping(ctx context.Context, mapping config.MappingConfig
 		task.Status = "failed"
 		task.Errors = err.Error()
 		if updateErr := s.db.UpdateTask(task); updateErr != nil {
-			log.Printf("[TraceID: %s] WARNING: Failed to update task record: %v", traceID, updateErr)
+			tasklog.Printf(ctx, "[TraceID: %s] WARNING: Failed to update task record: %v", traceID, updateErr)
 		}
-		log.Printf("[TraceID: %s] Task FAILED: error=%v, duration=%v", traceID, err, duration)
+		tasklog.Printf(ctx, "[TraceID: %s] Task FAILED: error=%v, duration=%v", traceID, err, duration)
 		return fmt.Errorf("[TraceID: %s] generation failed: %w", traceID, err)
 	}
 
@@ -203,25 +219,25 @@ func (s *Scheduler) RunMapping(ctx context.Context, mapping config.MappingConfig
 			errMsg += e.Error() + "; "
 		}
 		task.Errors = errMsg
-		log.Printf("[TraceID: %s] Task completed with %d errors", traceID, len(result.Errors))
+		tasklog.Printf(ctx, "[TraceID: %s] Task completed with %d errors", traceID, len(result.Errors))
 	}
 
 	if err := s.db.UpdateTask(task); err != nil {
-		log.Printf("[TraceID: %s] WARNING: Failed to update task record: %v", traceID, err)
+		tasklog.Printf(ctx, "[TraceID: %s] WARNING: Failed to update task record: %v", traceID, err)
 	}
 
-	log.Printf("[TraceID: %s] Task COMPLETED: created=%d, deleted=%d, skipped=%d, errors=%d, duration=%v",
+	tasklog.Printf(ctx, "[TraceID: %s] Task COMPLETED: created=%d, deleted=%d, skipped=%d, errors=%d, duration=%v",
 		traceID, result.FilesCreated, result.FilesDeleted, result.FilesSkipped, len(result.Errors), duration)
 
 	// 通知媒体服务器扫描库
 	if result.FilesCreated > 0 || result.FilesDeleted > 0 {
-		log.Printf("[TraceID: %s] Notifying media server to scan library (target: %s)", traceID, mapping.Target)
+		tasklog.Printf(ctx, "[TraceID: %s] Notifying media server to scan library (target: %s)", traceID, mapping.Target)
 		if err := s.notifier.NotifyLibraryScan(ctx, mapping.Target); err != nil {
-			log.Printf("[TraceID: %s] WARNING: Failed to notify media server: %v", traceID, err)
+			tasklog.Printf(ctx, "[TraceID: %s] WARNING: Failed to notify media server: %v", traceID, err)
 			// 不影响任务完成状态，仅记录日志
 		}
 	} else {
-		log.Printf("[TraceID: %s] No files created or deleted, skipping media server notification", traceID)
+		tasklog.Printf(ctx, "[TraceID: %s] No files created or deleted, skipping media server notification", traceID)
 	}
 
 	return nil
@@ -248,6 +264,7 @@ func (s *Scheduler) RunMappingByName(ctx context.Context, name string) error {
 		Concurrent:   mapping.Concurrent,
 		Mode:         mapping.Mode,
 		STRMMode:     mapping.STRMMode,
+		URLReplace:   mapping.URLReplace,
 		ForceRefresh: mapping.ForceRefresh,
 		Enabled:      mapping.Enabled,
 	}

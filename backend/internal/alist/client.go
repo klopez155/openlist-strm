@@ -35,6 +35,11 @@ func NewClient(baseURL, token string, signEnable bool, timeout time.Duration) *C
 	}
 }
 
+// BaseURL returns the configured OpenList base URL without trailing slash
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 // ListFiles lists files in the specified path
 func (c *Client) ListFiles(ctx context.Context, dirPath string, refresh bool) ([]FileItem, error) {
 	req := ListRequest{

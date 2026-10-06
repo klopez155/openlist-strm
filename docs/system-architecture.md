@@ -101,6 +101,8 @@ OpenList-STRM 当前是一个单仓库、单后端进程 + 单前端构建产物
 - 根据源路径扫描结果生成 `.strm` 文件
 - 支持 `incremental` / `full` 两种模式
 - 支持 `alist_path` / `http_url` 两种 STRM 内容模式
+- `http_url` 模式写入 OpenList `/d` 直链；映射级 `url_replace`（如 `http://openlist:5244`）可替换直链的协议与主机部分
+- 任务运行日志由 `internal/tasklog` 按任务记录（内存环形缓冲），通过 `GET /api/tasks/:id/logs` 读取，任务页“运行日志”弹窗在运行中每 2 秒轮询
 - 以配置粒度控制并发
 
 当前稳定事实：
