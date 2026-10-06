@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	client := NewClient("http://localhost:5244", "test-token", 30)
+	client := NewClient("http://localhost:5244", "test-token", false, 30)
 
 	if client == nil {
 		t.Fatal("NewClient() returned nil")
@@ -21,10 +21,13 @@ func TestNewClient(t *testing.T) {
 	if client.token != "test-token" {
 		t.Errorf("token = %v, want test-token", client.token)
 	}
+	if client.signEnable != false {
+		t.Errorf("signEnable = %v, want false", client.signEnable)
+	}
 }
 
 func TestNewClient_TrimTrailingSlash(t *testing.T) {
-	client := NewClient("http://localhost:5244/", "test-token", 30)
+	client := NewClient("http://localhost:5244/", "test-token", false, 30)
 	if client.baseURL != "http://localhost:5244" {
 		t.Errorf("baseURL = %v, want http://localhost:5244 (trailing slash should be removed)", client.baseURL)
 	}
@@ -39,7 +42,7 @@ func TestPing_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	err := client.Ping(context.Background())
 	if err != nil {
 		t.Errorf("Ping() error = %v, want nil", err)
@@ -52,7 +55,7 @@ func TestPing_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	err := client.Ping(context.Background())
 	if err == nil {
 		t.Error("Ping() expected error for server error, got nil")
@@ -97,7 +100,7 @@ func TestListFiles_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	files, err := client.ListFiles(context.Background(), "/movies", false)
 	if err != nil {
 		t.Fatalf("ListFiles() error = %v", err)
@@ -125,7 +128,7 @@ func TestListFiles_EmptyDirectory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	files, err := client.ListFiles(context.Background(), "/empty", false)
 	if err != nil {
 		t.Fatalf("ListFiles() error = %v", err)
@@ -147,7 +150,7 @@ func TestListFiles_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	_, err := client.ListFiles(context.Background(), "/movies", false)
 	if err == nil {
 		t.Error("ListFiles() expected error for API error, got nil")
@@ -205,7 +208,7 @@ func TestListFilesRecursive_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	files, err := client.ListFilesRecursive(context.Background(), "/movies", []string{"mp4", "mkv"}, false)
 	if err != nil {
 		t.Fatalf("ListFilesRecursive() error = %v", err)
@@ -247,7 +250,7 @@ func TestListFilesRecursive_FilterByExtension(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	files, err := client.ListFilesRecursive(context.Background(), "/media", []string{"mp4", "mkv"}, false)
 	if err != nil {
 		t.Fatalf("ListFilesRecursive() error = %v", err)
@@ -285,7 +288,7 @@ func TestGetFileURL_WithRawURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	url, err := client.GetFileURL(context.Background(), "/movies/movie.mp4")
 	if err != nil {
 		t.Fatalf("GetFileURL() error = %v", err)
@@ -304,7 +307,7 @@ func TestGetFileURL_EncodesPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", true, 30)
 	url, err := client.GetFileURL(context.Background(), "/电影/A #1?.mkv")
 	if err != nil {
 		t.Fatalf("GetFileURL() error = %v", err)
@@ -342,7 +345,7 @@ func TestGetFileURL_WithoutRawURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	url, err := client.GetFileURL(context.Background(), "/movies/movie.mp4")
 	if err != nil {
 		t.Fatalf("GetFileURL() error = %v", err)
@@ -381,7 +384,7 @@ func TestGetFileURL_WithSign(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", true, 30)
 	url, err := client.GetFileURL(context.Background(), "/movies/movie.mp4")
 	if err != nil {
 		t.Fatalf("GetFileURL() error = %v", err)
@@ -404,7 +407,7 @@ func TestGetFileURL_FileNotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	_, err := client.GetFileURL(context.Background(), "/movies/notfound.mp4")
 	if err == nil {
 		t.Error("GetFileURL() expected error for file not found, got nil")
@@ -422,7 +425,7 @@ func TestGetFileURL_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	_, err := client.GetFileURL(context.Background(), "/movies/movie.mp4")
 	if err == nil {
 		t.Error("GetFileURL() expected error for API error, got nil")
@@ -492,7 +495,7 @@ func TestContext_Cancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -514,7 +517,7 @@ func TestHTTP_ErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-token", 30)
+	client := NewClient(server.URL, "test-token", false, 30)
 	_, err := client.ListFiles(context.Background(), "/movies", false)
 	if err == nil {
 		t.Error("ListFiles() expected error for HTTP error, got nil")

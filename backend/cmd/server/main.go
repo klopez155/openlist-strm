@@ -70,6 +70,7 @@ func main() {
 	alistClient := alist.NewClient(
 		cfg.Alist.URL,
 		cfg.Alist.Token,
+		cfg.Alist.SignEnabled,
 		cfg.Alist.Timeout,
 	)
 	logger.Info.Printf("Alist client created: %s", cfg.Alist.URL)
