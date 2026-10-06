@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -112,18 +113,28 @@ func (c *Client) GetFileURL(ctx context.Context, filePath string) (string, error
 		return "", fmt.Errorf("file not found: %s", filePath)
 	}
 
-	// Build direct URL
-	if resp.Data.RawURL != "" {
-		return resp.Data.RawURL, nil
-	}
-
-	// Fallback: construct URL from base URL and path
-	fileURL := fmt.Sprintf("%s/d%s", c.baseURL, filePath)
+	// raw_url is the upstream driver's temporary link (e.g. PikPak CDN with expire=...),
+	// it must never be persisted into STRM. Always use OpenList's stable /d proxy link.
+	fileURL := c.baseURL + "/d" + encodePath(filePath)
 	if c.signEnable && resp.Data.Sign != "" {
-		fileURL += "?sign=" + resp.Data.Sign
+		fileURL += "?sign=" + url.QueryEscape(resp.Data.Sign)
 	}
 
 	return fileURL, nil
+}
+
+// encodePath escapes each segment of an OpenList path so names containing
+// spaces, '#', '?' or non-ASCII characters produce a valid URL.
+func encodePath(p string) string {
+	segments := strings.Split(p, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+	encoded := strings.Join(segments, "/")
+	if !strings.HasPrefix(encoded, "/") {
+		encoded = "/" + encoded
+	}
+	return encoded
 }
 
 // doRequest performs an HTTP request
